@@ -79,11 +79,12 @@ describe('Synthetix v3', function() {
     // ----------------------------------------
 
     describe('when configuring version 1', () => {
-      before('change settings', async () => {
-        tx = await beacon.configure(
-          [cratioSettingId],
-          [500]
-        );
+      before('deploy and run the migrator', async () => {
+        const Migrator = await ethers.getContractFactory('MigrationV1_2');
+        const migrator = await Migrator.deploy(beacon.address);
+        await migrator.deployed();
+
+        const tx = await migrator.migrateSettings();
         await tx.wait();
       });
 
@@ -101,20 +102,24 @@ describe('Synthetix v3', function() {
       // ----------------------------------------
 
       describe('when upgrading the system to version 2', () => {
-        before('deploy implementations', async () => {
-          const Nebula = await ethers.getContractFactory('NebulaV2');
-          nebulaImplementation = await Nebula.deploy();
+        before('deploy and run the migrator', async () => {
+          const Migrator = await ethers.getContractFactory('MigrationV2_2');
+          const migrator = await Migrator.deploy(beacon.address);
+          await migrator.deployed();
 
-          await nebulaImplementation.deployed();
-        });
+          let tx;
 
-        before('upgrade the beacon to version 2', async () => {
-          const tx = await beacon.upgrade(
-            [nebulaModuleId],
-            [nebulaImplementation.address]
-          );
+          tx = await migrator.prepareForMigration();
           await tx.wait();
 
+          tx = await migrator.migrateContracts();
+          await tx.wait();
+
+          tx = await migrator.finalizeMigration();
+          await tx.wait();
+        });
+
+        before('update to the new proxy abi', async () => {
           const proxyAddress = await beacon.getProxy(nebulaModuleId);
           nebulaProxy = await ethers.getContractAt(
             'NebulaV2',
