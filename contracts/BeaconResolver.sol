@@ -16,7 +16,7 @@ contract BeaconResolver {
         return _beacon.getProxy(moduleId);
     }
 
-    function _getSetting(bytes32 settingId) internal view returns (bytes32) {
+    function _getSetting(bytes32 settingId) internal view returns (uint) {
         return _beacon.getSetting(settingId);
     }
 }

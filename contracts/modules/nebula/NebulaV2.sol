@@ -20,7 +20,7 @@ contract NebulaV2 is NebulaV1 {
         return "NebulaV2";
     }
 
-    function getCRatio() public view returns (bytes32) {
+    function getCRatio() public view returns (uint) {
         return _getSetting(CRATIO_SETTING);
     }
 }

@@ -3,13 +3,13 @@ const { expect } = require('chai');
 describe('Synthetix v3', function() {
   let beacon;
 
-  const nebulaModuleId = ethers.utils.formatBytes32String('nebula');
-  let nebulaProxy, nebulaImplementation;
+  const nebulaModuleId = ethers.utils.formatBytes32String('nebula'); // 0x6e6562756c610000000000000000000000000000000000000000000000000000
+  let nebulaProxy;
 
-  const pulsarModuleId = ethers.utils.formatBytes32String('pulsar');
-  let pulsarProxy, pulsarImplementation;
+  const pulsarModuleId = ethers.utils.formatBytes32String('pulsar'); // 0x70756c7361720000000000000000000000000000000000000000000000000000
+  let pulsarProxy;
 
-  const cratioSettingId = ethers.utils.formatBytes32String('cratio');
+  const cratioSettingId = ethers.utils.formatBytes32String('cratio'); // 0x63726174696f0000000000000000000000000000000000000000000000000000
 
   // ----------------------------------------
   // Version 1
@@ -23,35 +23,30 @@ describe('Synthetix v3', function() {
       await beacon.deployed();
     });
 
-    before('deploy implementations', async () => {
-      const Nebula = await ethers.getContractFactory('NebulaV1');
-      nebulaImplementation = await Nebula.deploy();
-      await nebulaImplementation.deployed();
+    before('deploy and run the first migrator', async () => {
+      const Migrator = await ethers.getContractFactory('MigrationV1_1');
+      const migrator = await Migrator.deploy(beacon.address);
+      await migrator.deployed();
 
-      const Pulsar = await ethers.getContractFactory('PulsarV1');
-      pulsarImplementation = await Pulsar.deploy();
-      await pulsarImplementation.deployed();
-    });
-
-    before('upgrade the beacon to version 1', async () => {
       let tx;
 
-      // Upgrade contracts
-      tx = await beacon.upgrade(
-        [nebulaModuleId, pulsarModuleId],
-        [nebulaImplementation.address, pulsarImplementation.address]
-      );
+      tx = await migrator.prepareForMigration();
       await tx.wait();
 
-      // Configure settings
-      tx = await beacon.configure(
-        [cratioSettingId],
-        [ethers.utils.formatBytes32String('600')]
-      );
+      tx = await migrator.migrateContracts();
+      await tx.wait();
+
+      tx = await migrator.initializeNewProxies();
+      await tx.wait();
+
+      tx = await migrator.migrateSettings();
+      await tx.wait();
+
+      tx = await migrator.finalizeMigration();
       await tx.wait();
     });
 
-    before('initialize newly created proxies', async () => {
+    before('identify newly created proxies', async () => {
       let proxyAddress = await beacon.getProxy(nebulaModuleId);
       nebulaProxy = await ethers.getContractAt(
         'NebulaV1',
@@ -63,12 +58,6 @@ describe('Synthetix v3', function() {
         'PulsarV1',
         proxyAddress
       );
-
-      let tx = await nebulaProxy.setBeacon(beacon.address);
-      await tx.wait();
-
-      tx = await pulsarProxy.setBeacon(beacon.address);
-      await tx.wait();
     });
 
     it('retrieves the correct versions from the beacon', async () => {
@@ -82,7 +71,7 @@ describe('Synthetix v3', function() {
     });
 
     it('retrieves settings correctly', async () => {
-      expect(await beacon.getSetting(cratioSettingId)).to.equal(ethers.utils.formatBytes32String('600'));
+      expect(await beacon.getSetting(cratioSettingId)).to.equal(600);
     });
 
     // ----------------------------------------
@@ -93,7 +82,7 @@ describe('Synthetix v3', function() {
       before('change settings', async () => {
         tx = await beacon.configure(
           [cratioSettingId],
-          [ethers.utils.formatBytes32String('500')]
+          [500]
         );
         await tx.wait();
       });
@@ -104,7 +93,7 @@ describe('Synthetix v3', function() {
       });
 
       it('retrieves settings correctly', async () => {
-        expect(await beacon.getSetting(cratioSettingId)).to.equal(ethers.utils.formatBytes32String('500'));
+        expect(await beacon.getSetting(cratioSettingId)).to.equal(500);
       });
 
       // ----------------------------------------
@@ -148,7 +137,7 @@ describe('Synthetix v3', function() {
         });
 
         it('enables modules to know about settings', async () => {
-          expect(await nebulaProxy.getCRatio()).to.equal(ethers.utils.formatBytes32String('500'));
+          expect(await nebulaProxy.getCRatio()).to.equal(500);
         });
       });
     });

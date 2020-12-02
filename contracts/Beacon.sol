@@ -10,7 +10,7 @@ contract Beacon {
     uint256 private _settingsVersion;
 
     // setting id => setting value
-    mapping(bytes32 => bytes32) private _settings;
+    mapping(bytes32 => uint) private _settings;
 
     // module id => module proxy address
     mapping(bytes32 => address) private _proxies;
@@ -39,11 +39,11 @@ contract Beacon {
         _contractsVersion++;
     }
 
-    function configure(bytes32[] memory settingIds, bytes32[] memory values) public {
+    function configure(bytes32[] memory settingIds, uint[] memory values) public {
         uint len = settingIds.length;
         for (uint i; i < len; i++) {
             bytes32 settingId = settingIds[i];
-            bytes32 value = values[i];
+            uint value = values[i];
 
             _settings[settingId] = value;
         }
@@ -58,6 +58,14 @@ contract Beacon {
         emit ProxyCreated(moduleId, proxyAddress);
 
         return proxyAddress;
+    }
+
+    function suspend() public {
+        // TODO
+    }
+
+    function resume() public {
+        // TODO
     }
 
     function getProxy(bytes32 moduleId) public view returns (address) {
@@ -80,7 +88,7 @@ contract Beacon {
         return _settingsVersion;
     }
 
-    function getSetting(bytes32 settingId) public view returns (bytes32) {
+    function getSetting(bytes32 settingId) public view returns (uint) {
         return _settings[settingId];
     }
 }
