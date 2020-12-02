@@ -2,10 +2,20 @@ const { expect } = require('chai');
 
 describe('Synthetix v3', function() {
   let beacon;
+
+  const nebulaModuleId = ethers.utils.formatBytes32String('nebula');
   let nebulaProxy, nebulaImplementation;
+
+  const pulsarModuleId = ethers.utils.formatBytes32String('pulsar');
   let pulsarProxy, pulsarImplementation;
 
-  describe('when deploying the first version of the system', () => {
+  const cratioSettingId = ethers.utils.formatBytes32String('cratio');
+
+  // ----------------------------------------
+  // Version 1
+  // ----------------------------------------
+
+  describe('when deploying version 1', () => {
     before('deploy the beacon', async () => {
       const Beacon = await ethers.getContractFactory('Beacon');
       beacon = await Beacon.deploy();
@@ -24,46 +34,46 @@ describe('Synthetix v3', function() {
     });
 
     before('upgrade the beacon to version 1', async () => {
-      const nebulaName = ethers.utils.formatBytes32String('nebula')
-      const pulsarName = ethers.utils.formatBytes32String('pulsar')
+      let tx;
 
-      let tx = await beacon.upgrade(
-        [nebulaName, pulsarName],
+      // Upgrade contracts
+      tx = await beacon.upgrade(
+        [nebulaModuleId, pulsarModuleId],
         [nebulaImplementation.address, pulsarImplementation.address]
       );
-
       await tx.wait();
 
-      let proxyAddress = await beacon.getProxy(nebulaName);
+      // Configure settings
+      tx = await beacon.configure(
+        [cratioSettingId],
+        [ethers.utils.formatBytes32String('600')]
+      );
+      await tx.wait();
+    });
+
+    before('initialize newly created proxies', async () => {
+      let proxyAddress = await beacon.getProxy(nebulaModuleId);
       nebulaProxy = await ethers.getContractAt(
         'NebulaV1',
         proxyAddress
       );
 
-      proxyAddress = await beacon.getProxy(pulsarName);
+      proxyAddress = await beacon.getProxy(pulsarModuleId);
       pulsarProxy = await ethers.getContractAt(
         'PulsarV1',
         proxyAddress
       );
 
-      tx = await nebulaProxy.initialize(beacon.address);
+      let tx = await nebulaProxy.setBeacon(beacon.address);
       await tx.wait();
 
-      tx = await pulsarProxy.initialize(beacon.address);
+      tx = await pulsarProxy.setBeacon(beacon.address);
       await tx.wait();
     });
 
-    it('retrieves the correct version', async () => {
-      const version = await beacon.getVersion();
-
-      expect(version.toString()).to.equal('1');
-    });
-
-    it('retrieves the correct implementation and version for sender', async () => {
-      const [ implementation, version ] = await beacon.getImplementationAndVersionForSender();
-
-      expect(implementation.toString()).to.equal('0x0000000000000000000000000000000000000000');
-      expect(version.toString()).to.equal('1');
+    it('retrieves the correct versions from the beacon', async () => {
+      expect(await beacon.getContractsVersion()).to.equal('1');
+      expect(await beacon.getSettingsVersion()).to.equal('1');
     });
 
     it('properly forwards to the implementations', async () => {
@@ -71,83 +81,75 @@ describe('Synthetix v3', function() {
       expect(await pulsarProxy.whoami()).to.equal('PulsarV1');
     });
 
-    it.only('properly appends the version in the calldata', async () => {
-      expect(await nebulaProxy.getAppendedVersion()).to.equal('0000000000000000000000000000000000000000000000000000000000000001');
+    it('retrieves settings correctly', async () => {
+      expect(await beacon.getSetting(cratioSettingId)).to.equal(ethers.utils.formatBytes32String('600'));
     });
 
-    it('properly records extendedcalldata', async () => {
-      const tx = await nebulaProxy.recordCalldata();
-      await tx.wait();
+    // ----------------------------------------
+    // Configure version 1
+    // ----------------------------------------
 
-      const recordedCalldata = await nebulaProxy.getRecordedCalldata();
-      const recordedSelector = recordedCalldata.substr(2, 10);
-      const recordedVersion = recordedCalldata.substr(11, recordedCalldata.length);
-
-      expect(recordedSelector).to.equal('7c79c26f');
-      expect(recordedVersion).to.equal('0000000000000000000000000000000000000000000000000000000000000001');
-    });
-
-    it('properly connects modules and caches them', async () => {
-      const pulsarAddress = await nebulaProxy.doSomethingWithAnotherModule();
-      console.log(pulsarAddress);
-
-      expect(pulsarAddress).to.equal(pulsarProxy.address);
-
-      // Should revert?
-      const thing = await nebulaProxy.doSomethingWithAnotherModule();
-      console.log(thing);
-    });
-
-    describe('when upgrading the system to version 2', () => {
-      before('deploy implementations', async () => {
-        const Nebula = await ethers.getContractFactory('NebulaV2');
-        nebulaImplementation = await Nebula.deploy();
-
-        await nebulaImplementation.deployed();
-      });
-
-      before('upgrade the beacon to version 2', async () => {
-        const nebulaName = ethers.utils.formatBytes32String('nebula')
-
-        const tx = await beacon.upgrade(
-          [nebulaName],
-          [nebulaImplementation.address]
+    describe('when configuring version 1', () => {
+      before('change settings', async () => {
+        tx = await beacon.configure(
+          [cratioSettingId],
+          [ethers.utils.formatBytes32String('500')]
         );
-
         await tx.wait();
-
-        const proxyAddress = await beacon.getProxy(nebulaName);
-        nebulaProxy = await ethers.getContractAt(
-          'NebulaV2',
-          proxyAddress
-        );
       });
 
-      it('upgraded to version 2', async () => {
-        const version = await beacon.getVersion();
-
-        expect(version.toString()).to.equal('2');
+      it('retrieves the correct versions from the beacon', async () => {
+        expect(await beacon.getContractsVersion()).to.equal('1');
+        expect(await beacon.getSettingsVersion()).to.equal('2');
       });
 
-      it('properly forwards to the implementation', async () => {
-        expect(await nebulaProxy.whoami()).to.equal('NebulaV2');
-        expect(await pulsarProxy.whoami()).to.equal('PulsarV1');
+      it('retrieves settings correctly', async () => {
+        expect(await beacon.getSetting(cratioSettingId)).to.equal(ethers.utils.formatBytes32String('500'));
       });
 
-      it('properly appends the version in the calldata', async () => {
-        expect(await nebulaProxy.getAppendedVersion()).to.equal('0000000000000000000000000000000000000000000000000000000000000002');
-      });
+      // ----------------------------------------
+      // Version 2
+      // ----------------------------------------
 
-      it('properly records extendedcalldata', async () => {
-        const tx = await nebulaProxy.recordCalldata();
-        await tx.wait();
+      describe('when upgrading the system to version 2', () => {
+        before('deploy implementations', async () => {
+          const Nebula = await ethers.getContractFactory('NebulaV2');
+          nebulaImplementation = await Nebula.deploy();
 
-        const recordedCalldata = await nebulaProxy.getRecordedCalldata();
-        const recordedSelector = recordedCalldata.substr(2, 10);
-        const recordedVersion = recordedCalldata.substr(11, recordedCalldata.length);
+          await nebulaImplementation.deployed();
+        });
 
-        expect(recordedSelector).to.equal('7c79c26f');
-        expect(recordedVersion).to.equal('0000000000000000000000000000000000000000000000000000000000000002');
+        before('upgrade the beacon to version 2', async () => {
+          const tx = await beacon.upgrade(
+            [nebulaModuleId],
+            [nebulaImplementation.address]
+          );
+          await tx.wait();
+
+          const proxyAddress = await beacon.getProxy(nebulaModuleId);
+          nebulaProxy = await ethers.getContractAt(
+            'NebulaV2',
+            proxyAddress
+          );
+        });
+
+        it('retrieves the correct versions from the beacon', async () => {
+          expect(await beacon.getContractsVersion()).to.equal('2');
+          expect(await beacon.getSettingsVersion()).to.equal('2');
+        });
+
+        it('properly forwards to the implementations', async () => {
+          expect(await nebulaProxy.whoami()).to.equal('NebulaV2');
+          expect(await pulsarProxy.whoami()).to.equal('PulsarV1');
+        });
+
+        it('enables modules to know about each other', async () => {
+          expect(await nebulaProxy.whoispulsar(), 'PulsarV1');
+        });
+
+        it('enables modules to know about settings', async () => {
+          expect(await nebulaProxy.getCRatio()).to.equal(ethers.utils.formatBytes32String('500'));
+        });
       });
     });
   });

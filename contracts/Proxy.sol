@@ -29,7 +29,7 @@ contract Proxy {
         }
 
         // Get implementation and version for this proxy from the beacon
-        (address implementation, uint256 version) = Beacon(beacon).getImplementationAndVersionForSender();
+        address implementation = Beacon(beacon).getImplementationForSender();
 
         // Forward calldata and version to the implementation
         assembly {
@@ -37,12 +37,8 @@ contract Proxy {
             let calldataSize := calldatasize()
             calldatacopy(0, 0, calldataSize)
 
-            // Copy the version to memory, contiguous to the calldata
-            mstore(calldataSize, version)
-
-            // Forward the calldata + version using delegatecall
-            let totalSize := add(calldataSize, 0x20)
-            let result := delegatecall(gas(), implementation, 0, totalSize, 0, 0)
+            // Forward the calldata using delegatecall
+            let result := delegatecall(gas(), implementation, 0, calldataSize, 0, 0)
 
             // Copy the returned data to memory,  at position 0
             returndatacopy(0, 0, returndatasize())

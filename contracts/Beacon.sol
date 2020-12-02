@@ -2,57 +2,85 @@
 pragma solidity >= 0.6.0 < 0.8.0;
 
 import "./Proxy.sol";
+import "./BeaconResolver.sol";
 
 
 contract Beacon {
-    uint256 private _version;
+    uint256 private _contractsVersion;
+    uint256 private _settingsVersion;
 
+    // setting id => setting value
+    mapping(bytes32 => bytes32) private _settings;
+
+    // module id => module proxy address
     mapping(bytes32 => address) private _proxies;
+
+    // module proxy address => proxy implementation address
     mapping(address => address) private _implementations;
 
-    event ProxyCreated(address proxy);
+    event ProxyCreated(bytes32 moduleId, address proxy);
 
-    // TODO: protect with modifier
-    function upgrade(bytes32[] memory names, address[] memory newImplementations) public {
-        uint len = names.length;
+    function upgrade(bytes32[] memory moduleIds, address[] memory newImplementations) public {
+        uint len = moduleIds.length;
         for (uint i; i < len; i++) {
-            bytes32 name = names[i];
+            bytes32 moduleId = moduleIds[i];
             address implementation = newImplementations[i];
 
-            address proxy = _proxies[name];
+            address proxy = _proxies[moduleId];
             if (proxy == address(0)) {
-                proxy = _createProxy(name);
-                _implementations[proxy] = implementation;
+                proxy = _createProxy(moduleId);
             } else {
                 // TODO: Upgrade implementation for existing proxy.
             }
+
+            _implementations[proxy] = implementation;
         }
 
-        _version++;
+        _contractsVersion++;
     }
 
-    function _createProxy(bytes32 name) private returns (address) {
-        address proxyAddress = address(new Proxy());
-        _proxies[name] = proxyAddress;
+    function configure(bytes32[] memory settingIds, bytes32[] memory values) public {
+        uint len = settingIds.length;
+        for (uint i; i < len; i++) {
+            bytes32 settingId = settingIds[i];
+            bytes32 value = values[i];
 
-        emit ProxyCreated(proxyAddress);
+            _settings[settingId] = value;
+        }
+
+        _settingsVersion++;
+    }
+
+    function _createProxy(bytes32 moduleId) private returns (address) {
+        address proxyAddress = address(new Proxy());
+        _proxies[moduleId] = proxyAddress;
+
+        emit ProxyCreated(moduleId, proxyAddress);
 
         return proxyAddress;
     }
 
-    function getProxy(bytes32 name) public view returns (address) {
-        return _proxies[name];
+    function getProxy(bytes32 moduleId) public view returns (address) {
+        return _proxies[moduleId];
     }
 
     function getImplementation(address proxy) public view returns (address) {
         return _implementations[proxy];
     }
 
-    function getVersion() public view returns (uint) {
-        return _version;
+    function getImplementationForSender() public view returns (address) {
+        return _implementations[msg.sender];
     }
 
-    function getImplementationAndVersionForSender() public view returns (address, uint) {
-        return (getImplementation(msg.sender), _version);
+    function getContractsVersion() public view returns (uint) {
+        return _contractsVersion;
+    }
+
+    function getSettingsVersion() public view returns (uint) {
+        return _settingsVersion;
+    }
+
+    function getSetting(bytes32 settingId) public view returns (bytes32) {
+        return _settings[settingId];
     }
 }

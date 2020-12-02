@@ -5,33 +5,18 @@ import "./Beacon.sol";
 
 
 contract BeaconResolver {
-    // _moduleCache[version][name] = address
-    mapping(uint => mapping(bytes32 => address)) private _moduleCache;
-
     Beacon private _beacon;
 
-    // TODO: protect so that it's only called once
-    function initialize(address beacon) public {
+    function setBeacon(address beacon) public {
+        require(address(_beacon) == address(0), "Beacon already set");
         _beacon = Beacon(beacon);
     }
 
-    function _getAppendedVersion(bytes memory data) internal pure returns (uint version) {
-        uint256 len = data.length;
-
-        assembly {
-            version := mload(sub(add(data, len), 0x20))
-        }
+    function _getModule(bytes32 moduleId) internal view returns (address) {
+        return _beacon.getProxy(moduleId);
     }
 
-    function _getModule(bytes32 name, bytes memory data) internal returns (address) {
-        uint version = _getAppendedVersion(data);
-        address module = _moduleCache[version][name];
-
-        if (module == address(0)) {
-            module = _beacon.getProxy(name);
-            _moduleCache[version][name] = module;
-        }
-
-        return module;
+    function _getSetting(bytes32 settingId) internal view returns (bytes32) {
+        return _beacon.getSetting(settingId);
     }
 }
